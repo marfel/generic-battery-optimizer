@@ -14,6 +14,7 @@ import pandas as pd
 from battery_optimizer.profiles.battery import Battery
 from battery_optimizer.profiles.ev import EV
 from battery_optimizer.profiles.heat_pump import HeatPump
+from battery_optimizer.profiles.scheduled_ev import ScheduledEV
 
 
 # TODO add this as a separate endpoint to the service
@@ -25,6 +26,7 @@ def generate_common_time_series(
     evs: list[EV] = [],
     heat_pumps: list[HeatPump] = [],
     round_freq: str | None = None,
+    scheduled_evs: list[ScheduledEV] = [],
 ) -> Sequence[datetime.datetime]:
     """
     Build a unified index from all given components as timestamps.
@@ -48,7 +50,13 @@ def generate_common_time_series(
     round_freq : str | None, optional
         If given, all timestamps will be rounded to the closest frequency
         specified by the pandas offset alias string (e.g. '5min', 'h'), by
-        default None.
+        default None. The timestamps of scheduled evs are not rounded, so
+        they have to be part of the rounded index to be accepted by the model.
+    scheduled_evs : list[ScheduledEV]
+        A list of scheduled evs. All timestamps where their connection or
+        driving power changes or a target is due will be included in the
+        index if they lie within the range of the timestamps of all other
+        components. Timestamps outside this range do not extend the index.
 
     Returns
     -------
@@ -129,6 +137,15 @@ def generate_common_time_series(
 
     if round_freq is not None:
         index = {pd.to_datetime(time).round(round_freq) for time in index}
+
+    # Scheduled EVs
+    schedule_times = {
+        time for ev in scheduled_evs for time in ev.schedule_timestamps()
+    }
+    if index:
+        first, last = min(index), max(index)
+        schedule_times = {t for t in schedule_times if first <= t <= last}
+    index.update(schedule_times)
     return sorted(pd.to_datetime(i) for i in index)
 
 

@@ -15,8 +15,10 @@ import logging
 from pandas import infer_freq
 import pyomo.environ as pyo
 from battery_optimizer.blocks.ev import EVBlock
+from battery_optimizer.blocks.scheduled_ev import ScheduledEVBlock
 from battery_optimizer.helpers.blocks import get_period_length
 from battery_optimizer.profiles.ev import EV
+from battery_optimizer.profiles.scheduled_ev import ScheduledEV
 from battery_optimizer.static.model import COMPONENT_MAP, TEXT_OBJECTIVE_NAME
 from battery_optimizer.profiles.battery import Battery
 from battery_optimizer.blocks.fixed_consumption import FixedConsumptionBlock
@@ -105,7 +107,7 @@ class Model:
         )
         return self.model.batteries.component(battery.name)
 
-    def add_ev(self, ev: EV) -> pyo.Block:
+    def add_ev(self, ev: EV | ScheduledEV) -> pyo.Block:
         """
         Add a new electric vehicle to the model.
 
@@ -116,14 +118,17 @@ class Model:
 
         Parameters
         ----------
-        ev : EV
-            The electric vehicle to add to the model.
+        ev : EV | ScheduledEV
+            The electric vehicle to add to the model. A ScheduledEV is added
+            with add_scheduled_ev().
 
         Returns
         -------
         pyo.Block
             The block created from the electric vehicle model.
         """
+        if isinstance(ev, ScheduledEV):
+            return self.add_scheduled_ev(ev)
         log.debug("Adding %s to the model", ev.name)
         log.debug(ev)
         self.model.evs.add_component(
@@ -131,6 +136,39 @@ class Model:
             val=EVBlock(self.model.i, ev).build_block(),
         )
         return self.model.evs.component(ev.name)
+
+    def add_scheduled_ev(self, ev: ScheduledEV) -> pyo.Block:
+        """
+        Add a new electric vehicle with a known schedule to the model.
+
+        The vehicle has one continuous state of charge. It drives with a
+        fixed battery-side power (not exchanged with the energy network),
+        can only charge or discharge to the network while connected and has
+        to reach its SoC targets at their timestamps.
+
+        Parameters
+        ----------
+        ev : ScheduledEV
+            The scheduled electric vehicle to add to the model.
+
+        Returns
+        -------
+        pyo.Block
+            The block created from the scheduled electric vehicle.
+
+        Raises
+        ------
+        ValueError
+            If the schedule or targets of the vehicle can not be represented
+            by the index of the model.
+        """
+        log.debug("Adding %s to the model", ev.name)
+        log.debug(ev)
+        self.model.scheduled_evs.add_component(
+            name=ev.name,
+            val=ScheduledEVBlock(self.model.i, ev).build_block(),
+        )
+        return self.model.scheduled_evs.component(ev.name)
 
     def add_heat_pump(self, heat_pump: HeatPump) -> pyo.Block:
         """
