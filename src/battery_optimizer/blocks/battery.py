@@ -47,6 +47,25 @@ class NewBatteryBlock(BaseBlock):
         super().__init__(index)
         self.battery = battery
 
+    def _internal_withdrawal(self, i: datetime.datetime) -> float:
+        """
+        Get the energy withdrawn from the stored energy outside the network.
+
+        Subclasses can override this to model consumption inside the battery
+        (e.g. driving) that is not exchanged with the energy network.
+
+        Parameters
+        ----------
+        i : datetime.datetime
+            The current timestamp.
+
+        Returns
+        -------
+        float
+            The stored energy in Wh withdrawn in the period starting at i.
+        """
+        return 0
+
     def _populate_block(self, block: pyo.Block) -> pyo.Block:
         """
         Build the battery block.
@@ -115,7 +134,7 @@ class NewBatteryBlock(BaseBlock):
                 i
             ] * self.battery.charge_efficiency - block.energy_source[i] * (
                 1 / self.battery.discharge_efficiency
-            )
+            ) - self._internal_withdrawal(i)
 
         # Discharge energy
         block.soc_constraint = pyo.Constraint(self.index, expr=soc_rule)

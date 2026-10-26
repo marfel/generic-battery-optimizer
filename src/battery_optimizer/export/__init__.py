@@ -301,12 +301,14 @@ class Exporter:
 
         # ev soc
         ev_soc: dict[str, dict[pd.Timestamp, float]] = {}
-        for ev in variables["evs"]:
-            component = self._model.model.evs.component(ev)
-            ev_soc[ev] = {
-                index: component.soc[index].value / component.soc[index].ub
-                for index in component.soc
-            }
+        for ev_group in ("evs", "scheduled_evs"):
+            for ev in variables[ev_group]:
+                component = self._model.model.component(ev_group).component(ev)
+                ev_soc[ev] = {
+                    index: component.soc[index].value
+                    / component.soc[index].ub
+                    for index in component.soc
+                }
 
         return ModelDataFrame(variables, soc, ev_soc)
 

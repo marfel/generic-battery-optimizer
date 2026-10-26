@@ -10,6 +10,7 @@ import pandas as pd
 from battery_optimizer.profiles.battery import Battery
 from battery_optimizer.profile_stack_problem import ProfileStackProblem
 from battery_optimizer.profiles.ev import EV
+from battery_optimizer.profiles.scheduled_ev import ScheduledEV
 from battery_optimizer.solver import Solver
 from battery_optimizer.export import Exporter
 from battery_optimizer.profiles.heat_pump import HeatPump
@@ -23,6 +24,7 @@ def optimize(
     batteries: list[Battery] | None = None,
     evs: list[EV] | None = None,
     heat_pumps: list[HeatPump] | None = None,
+    scheduled_evs: list[ScheduledEV] | None = None,
     **kwargs,
 ) -> tuple[
     pd.DataFrame,
@@ -61,6 +63,9 @@ def optimize(
         A list of electric vehicles that can be used in the optimization.
     heat_pumps : List[HeatPump]
         A list of heat pumps that provide heating energy for a household.
+    scheduled_evs : List[ScheduledEV]
+        A list of electric vehicles with a known schedule of connection and
+        driving. Their power and SoC are part of ev_power and ev_soc.
     **kwargs : dict
         Additional arguments passed to the solver.
 
@@ -94,6 +99,7 @@ def optimize(
         batteries=batteries,
         evs=evs,
         heat_pumps=heat_pumps,
+        scheduled_evs=scheduled_evs,
     )
     opt.set_up()
     Solver(**kwargs).solve(opt.model.model)

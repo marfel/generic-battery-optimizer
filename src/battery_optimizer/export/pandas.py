@@ -141,7 +141,9 @@ class ModelDataFrame:
         Indexed by the timestamps from which the specified power should be
         used by a device.
         Electric vehicles have positive power when they are charged and
-        negative power when they are discharged.
+        negative power when they are discharged. Scheduled electric vehicles
+        are included; their fixed driving consumption is not exchanged with
+        the network and therefore not part of this power.
 
         Returns
         -------
@@ -154,7 +156,10 @@ class ModelDataFrame:
                 {
                     device: pd.Series(values["sink"])
                     - pd.Series(values["source"])
-                    for device, values in self._model_dict["evs"].items()
+                    for device, values in {
+                        **self._model_dict["evs"],
+                        **self._model_dict.get("scheduled_evs", {}),
+                    }.items()
                 }
             )
         )

@@ -79,6 +79,8 @@ Available Methods are:
 |Method                 |Device/Profile                                         |
 |-----------------------|-------------------------------------------------------|
 |add_battery            |Batteries - Home battery storage or EV assert_batteries|
+|add_ev                |Electric vehicles with one charging session (EV)       |
+|add_scheduled_ev       |Electric vehicles with a known driving/connection schedule (ScheduledEV)|
 |add_heat_pump          |Heat pumps - Air-Water or Water/Brine-Water Heat pumps |
 |add_buy_profile        |Energy buy profiles - provide energy for a cost        |
 |add_sell_profile       |Energy sell profiles - can sell energy for a revenue   |
@@ -127,6 +129,33 @@ battery_block = my_model.add_battery(
     )
 )
 ```
+
+##### Scheduled EVs (fleets with driving and charging periods)
+A `ScheduledEV` (profile `battery_optimizer.profiles.scheduled_ev`, added with `add_scheduled_ev()` or `add_ev()`, or passed as `scheduled_evs` to `optimize()` / `ProfileStackProblem`) models one battery with a single continuous state of charge over alternating periods of driving and connection to a charger. See `example/scheduled_ev_fleet.py` for a fleet with a shared grid limit.
+The existing `EV` (single charging session) is unchanged.
+
+```python
+from battery_optimizer.profiles.scheduled_ev import ScheduledEV
+ev = ScheduledEV(
+    name="van1",
+    capacity=60000,  # Wh
+    max_charge_power=11000,  # W
+    start_soc=1,
+    connected={"2026-10-26T06:00Z": True, "2026-10-26T08:00Z": False, "2026-10-26T12:00Z": True},
+    driving_power={"2026-10-26T08:00Z": 5000, "2026-10-26T12:00Z": 0},
+    targets=[("2026-10-27T06:00Z", 1.0)],  # list of (time, soc), one per morning
+)
+my_model.add_scheduled_ev(ev)
+```
+
+Semantics:
+- Power is in W and energy in Wh. `connected` (bool) and `driving_power` (>= 0) are piecewise constant: a value applies from its timestamp (inclusive) until the next timestamp (exclusive). Before the first timestamp the vehicle is not connected and does not drive. A schedule timestamp before the model horizon sets the initial state, timestamps after it are ignored.
+- Driving is fixed, battery-side consumption: it withdraws `driving_power * period length` from the stored energy once. It is not an energy flow in the model's energy network and charge/discharge efficiencies are not applied. It works with `max_discharge_power=0` (the default, no V2G).
+- Charging and V2G (`max_discharge_power > 0`) are only possible while connected. Driving while connected is rejected.
+- Each target is a minimum SoC (`soc >= target`, so 100% means full) that must be reached when its timestamp begins, i.e. the energy at the end of the preceding period. Nothing is enforced after the deadline, so the vehicle can drive right away, and there are no targets at daytime stops. Targets must be unique, within `min_soc`/`max_soc` and inside the model horizon. A target at the first timestamp must not exceed `start_soc`. If the target can not be reached the model is infeasible.
+- All timestamps must be timezone aware or all naive (also compared to the index). Schedule timestamps and targets have to be part of the model index: `generate_common_time_series(..., scheduled_evs=[...])` and `ProfileStackProblem` add the ones within the time range of the other profiles; with a manually built index or `round_freq` timestamps that are not in the index are rejected with a `ValueError` instead of being shifted.
+- Power and SoC of scheduled EVs are exported with the other EVs (`to_ev_power`, `to_ev_soc`). The power only contains the charging/V2G flow, not the driving.
+- The completion constraint of the old `EV` class (SoC fixed to `end_soc` for every timestamp from `charge_end_time` on) is intentionally not changed; use `ScheduledEV` if the vehicle has to discharge after the target.
 
 The heat pump model is one of the more complex components that can be added to an optimization problem.
 Due to its complexity some functionality that may be useful is handled by other methods than the usual device model. These functions are  

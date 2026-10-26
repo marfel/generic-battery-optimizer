@@ -14,6 +14,7 @@ from battery_optimizer.helpers.parse_profile_stacks import (
 from battery_optimizer.model import Model
 from battery_optimizer.profiles.battery import Battery
 from battery_optimizer.profiles.ev import EV
+from battery_optimizer.profiles.scheduled_ev import ScheduledEV
 from battery_optimizer.profiles.heat_pump import HeatPump
 from battery_optimizer.profiles.profiles import ProfileStack
 
@@ -57,6 +58,7 @@ class ProfileStackProblem:
         batteries: list[Battery] | None = None,
         evs: list[EV] | None = None,
         heat_pumps: list[HeatPump] | None = None,
+        scheduled_evs: list[ScheduledEV] | None = None,
     ) -> None:
         """
         Format all input data and set up the base model.
@@ -93,6 +95,11 @@ class ProfileStackProblem:
             A list of electric vehicles that can be used in the optimization.
         heat_pumps : List[HeatPump]
             A list of heat pumps that provide heating energy for a household.
+        scheduled_evs : List[ScheduledEV]
+            A list of electric vehicles with a known schedule of connection
+            and driving. Their schedule timestamps within the time range of
+            the profiles are added to the index. Targets outside this range
+            are rejected.
 
         Raises
         ------
@@ -134,6 +141,14 @@ class ProfileStackProblem:
                     temp_index.append(ev.charge_end_time)
                 if ev.charge_start_time is not None:
                     temp_index.append(ev.charge_start_time)
+        if scheduled_evs is not None and temp_index:
+            first, last = min(temp_index), max(temp_index)
+            for scheduled_ev in scheduled_evs:
+                temp_index.extend(
+                    time
+                    for time in scheduled_ev.schedule_timestamps()
+                    if first <= time <= last
+                )
         log.debug("Temporary Index:")
         log.debug(temp_index)
 
@@ -201,6 +216,9 @@ class ProfileStackProblem:
         else:
             self.evs = []
 
+        log.debug("Initializing scheduled electric vehicles")
+        self.scheduled_evs = scheduled_evs if scheduled_evs is not None else []
+
         log.debug("Initializing heat pumps")
         if heat_pumps is not None:
             self.heat_pumps = heat_pumps
@@ -252,6 +270,10 @@ class ProfileStackProblem:
         log.debug("Adding all electric vehicles to the model")
         for ev in self.evs:
             self.model.add_ev(ev)
+
+        log.debug("Adding all scheduled electric vehicles to the model")
+        for scheduled_ev in self.scheduled_evs:
+            self.model.add_scheduled_ev(scheduled_ev)
 
         log.debug("Adding all heat pumps to the model")
         for heat_pump in self.heat_pumps:
