@@ -7,7 +7,9 @@ SoC targets that only apply at their own timestamp.
 """
 
 import datetime
+
 import pyomo.environ as pyo
+
 from battery_optimizer.blocks.battery import NewBatteryBlock as BatteryBlock
 from battery_optimizer.helpers.blocks import (
     get_period_length,
@@ -134,9 +136,7 @@ class ScheduledEVBlock(BatteryBlock):
                 block.energy_source[i].setub(0)
 
         if self.targets:
-            block.target_times = pyo.Set(
-                initialize=sorted(self.targets), ordered=True
-            )
+            block.target_times = pyo.Set(initialize=sorted(self.targets), ordered=True)
 
             def target_reached(_, i: datetime.datetime) -> pyo.Constraint:
                 """
@@ -160,7 +160,5 @@ class ScheduledEVBlock(BatteryBlock):
                     return pyo.Constraint.Skip
                 return block.soc[self.index.prev(i)] >= target
 
-            block.target_soc = pyo.Constraint(
-                block.target_times, rule=target_reached
-            )
+            block.target_soc = pyo.Constraint(block.target_times, rule=target_reached)
         return block
